@@ -5,6 +5,7 @@ Streamlit Stock Analysis Tool
 - Computes technical indicators
 - Displays summary stats and plots
 - Interactive web app interface
+- Provides buy/sell/hold recommendations based on SMA crossovers and RSI
 
 Install dependencies:
   pip install streamlit yfinance pandas numpy matplotlib seaborn
@@ -67,6 +68,44 @@ def calculate_return_stats(df):
         'Annualized Volatility': annualized_vol
     }
 
+def generate_recommendation(df):
+    """
+    Generate buy/sell/hold recommendation based on:
+    - SMA20 and SMA50 crossover (last two days)
+    - RSI current value
+
+    Logic:
+    - Buy signal if SMA20 crosses above SMA50 or RSI < 30 (oversold)
+    - Sell signal if SMA20 crosses below SMA50 or RSI > 70 (overbought)
+    - Hold otherwise
+    """
+    rec = "Hold"
+
+    if df.shape[0] < 2:
+        return rec  # not enough data to analyze crossover
+
+    # Get last two values for SMA20 and SMA50
+    sma20_yesterday = df['SMA20'].iloc[-2]
+    sma50_yesterday = df['SMA50'].iloc[-2]
+    sma20_today = df['SMA20'].iloc[-1]
+    sma50_today = df['SMA50'].iloc[-1]
+
+    rsi_today = df['RSI14'].iloc[-1]
+
+    # Check crossover
+    if pd.notna(sma20_yesterday) and pd.notna(sma50_yesterday) and pd.notna(sma20_today) and pd.notna(sma50_today):
+        if (sma20_yesterday < sma50_yesterday) and (sma20_today > sma50_today):
+            rec = "Buy"
+        elif (sma20_yesterday > sma50_yesterday) and (sma20_today < sma50_today):
+            rec = "Sell"
+    # RSI based signals (either overrides or complements crossover)
+    if rsi_today < 30:
+        rec = "Buy (RSI Oversold)"
+    elif rsi_today > 70:
+        rec = "Sell (RSI Overbought)"
+
+    return rec
+
 def plot_stock_data(df, ticker):
     """
     Plot closing price, moving averages, RSI, and Bollinger Bands.
@@ -127,10 +166,19 @@ def main():
                 df = fetch_stock_data(ticker, period=period, interval=interval)
                 df = compute_technical_indicators(df)
                 stats = calculate_return_stats(df)
+                recommendation = generate_recommendation(df)
 
                 st.subheader("Summary Statistics")
                 st.write(f"**Cumulative Return over period:** {stats['Cumulative Return']*100:.2f}%")
                 st.write(f"**Annualized Volatility:** {stats['Annualized Volatility']*100:.2f}%")
+
+                st.subheader("Buy/Sell Recommendation")
+                if recommendation.startswith("Buy"):
+                    st.success(f"Recommendation: {recommendation}")
+                elif recommendation.startswith("Sell"):
+                    st.error(f"Recommendation: {recommendation}")
+                else:
+                    st.info(f"Recommendation: {recommendation}")
 
                 fig = plot_stock_data(df, ticker)
                 st.pyplot(fig)
@@ -140,4 +188,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
