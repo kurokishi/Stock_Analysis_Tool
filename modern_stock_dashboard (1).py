@@ -1,12 +1,9 @@
-
 import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-
-sns.set(style='whitegrid')
+import plotly.graph_objs as go
+from babel.numbers import format_currency
 
 def fetch_and_prepare(ticker, period='1y', interval='1d'):
     df = yf.Ticker(ticker).history(period=period, interval=interval)
@@ -18,38 +15,30 @@ def fetch_and_prepare(ticker, period='1y', interval='1d'):
     df['Volume_MA'] = df['Volume'].rolling(20).mean()
     return df
 
-def plot_main_chart(df, ticker):
-    fig, axs = plt.subplots(3, 1, figsize=(14, 10), sharex=True)
+def format_rp(value):
+    try:
+        return format_currency(value, "IDR", locale="id_ID")
+    except:
+        return f"Rp{value:,.0f}"
 
-    axs[0].plot(df.index, df['Close'], label='Close')
-    axs[0].plot(df.index, df['SMA20'], label='SMA20', linestyle='--')
-    axs[0].plot(df.index, df['SMA50'], label='SMA50', linestyle='--')
-    axs[0].set_title(f"{ticker} - Harga dan Moving Average")
-    axs[0].legend()
-
-    axs[1].plot(df.index, df['RSI'], color='purple')
-    axs[1].axhline(70, color='red', linestyle='--')
-    axs[1].axhline(30, color='green', linestyle='--')
-    axs[1].set_title("RSI (14)")
-
-    axs[2].bar(df.index, df['Volume'], label='Volume', alpha=0.5)
-    axs[2].plot(df.index, df['Volume_MA'], label='Volume MA(20)', color='orange')
-    axs[2].legend()
-    axs[2].set_title("Volume")
-
-    plt.tight_layout()
+def interactive_chart(df, ticker):
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=df.index, y=df['Close'], mode='lines', name='Close'))
+    fig.add_trace(go.Scatter(x=df.index, y=df['SMA20'], mode='lines', name='SMA20'))
+    fig.add_trace(go.Scatter(x=df.index, y=df['SMA50'], mode='lines', name='SMA50'))
+    fig.update_layout(title=f"{ticker} Harga Saham & MA", xaxis_title='Tanggal', yaxis_title='Harga (Rp)', template='plotly_white')
     return fig
 
 def app():
     st.set_page_config(layout="wide")
-    st.title("📈 Dashboard Modern Analisis Saham")
+    st.title("📊 Dashboard Saham Interaktif (Rupiah + Plotly)")
 
     with st.sidebar:
-        st.header("Pengaturan Analisis")
-        tickers = st.text_input("Ticker (pisahkan koma)", "AAPL,MSFT")
+        st.header("Pengaturan")
+        tickers = st.text_input("Ticker (pisahkan koma)", "ADRO.JK, ANTM.JK")
         period = st.selectbox("Periode", ['6mo', '1y', '2y'], index=1)
         interval = st.selectbox("Interval", ['1d', '1wk'], index=0)
-        dca_value = st.number_input("DCA per pembelian", value=1000000)
+        dca_value = st.number_input("Nominal DCA", value=1000000)
         freq = st.radio("Frekuensi DCA", ['Bulanan', 'Mingguan'])
 
     if tickers:
@@ -61,7 +50,7 @@ def app():
                 col1, col2 = st.columns([2, 1])
 
                 with col1:
-                    st.pyplot(plot_main_chart(df, ticker))
+                    st.plotly_chart(interactive_chart(df, ticker), use_container_width=True)
 
                 with col2:
                     last_price = df['Close'].iloc[-1]
@@ -79,10 +68,10 @@ def app():
                     yield_rate = (avg_div / last_price * 100) if avg_div > 0 else 0
                     proj_div = avg_div * 1000
 
-                    st.metric("Harga Terakhir", f"${last_price:.2f}")
+                    st.metric("Harga Terakhir", format_rp(last_price))
                     st.metric("Return DCA", f"{dca_return:.2f}%")
-                    st.metric("Rata-rata Yield", f"{yield_rate:.2f}%")
-                    st.metric("Proyeksi Dividen (10 lot)", f"${proj_div:.2f}")
+                    st.metric("Yield Rata-rata", f"{yield_rate:.2f}%")
+                    st.metric("Proyeksi Dividen (10 lot)", format_rp(proj_div))
 
                 with st.expander("Data Historis"):
                     st.dataframe(df.tail(50))
@@ -92,3 +81,4 @@ def app():
 
 if __name__ == "__main__":
     app()
+        
